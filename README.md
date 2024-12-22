@@ -4,6 +4,8 @@ A simple Linux USB driver for controlling Android devices using the [HID](https:
 
 Basically this driver will put the Android device in [accessory mode](https://developer.android.com/develop/connectivity/usb) and then leverages AOAv2 to send HID events to the Android device. This driver only leverages only some simple HID functionality: keyboard, mouse, volume, brightness.
 
+*Warning: driver written by someone with zero experience writing drivers*
+
 # How to use
 
 First figure out Vendor ID and Product ID of the Android devices. A simple way to achieve this is to connect the device and use `lsusb`, which will show for example an entry like:
