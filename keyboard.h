@@ -4,9 +4,6 @@
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 
-#define major(x)        ((int32_t)(((u_int32_t)(x) >> 24) & 0xff))
-#define minor(x)        ((int32_t)((x) & 0xffffff))
-
 int setup_keyboard(dev_t dev_nr);
 void cleanup_keyboard(void);
 

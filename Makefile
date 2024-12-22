@@ -1,7 +1,7 @@
 .PHONY: install uninstall
 
 obj-m += aoa_hid_driver.o
-aoa_hid_driver-objs := module.o sys_files.o usb.o keyboard.o
+aoa_hid_driver-objs := module.o sys_files.o usb.o keyboard.o hid_descriptor.o
 
 all: module
 

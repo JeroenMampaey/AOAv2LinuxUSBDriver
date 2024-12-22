@@ -1,6 +1,7 @@
 #include "usb.h"
 #include "sys_files.h"
 #include "keyboard.h"
+#include "hid_descriptor.h"
 
 #include <linux/device.h>
 #include <linux/slab.h>
@@ -92,44 +93,52 @@ int setup_usb(void){
         accessory_mode_devices[i] = NULL;
     }
 
+    if(setup_hid_descriptor()){
+        printk("aoa_hid_driver - Error setting up HID descriptor\n");
+        goto setup_usb_error1;
+    }
+
     if(usb_register(&android_default_driver)){
         printk("aoa_hid_driver - Error registering USB driver\n");
-        goto setup_usb_error1;
+        goto setup_usb_error2;
     }
 
     if(alloc_chrdev_region(&first_accessory_mode_device_nr, 0, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES, "android_devices") < 0){
 		printk("aoa_hid_driver - first_accessory_mode_device_nr could not be allocated\n");
-		goto setup_usb_error2;
+		goto setup_usb_error3;
 	}
-
+    
     if(!(accessory_mode_device_class = class_create("android"))){
         printk("aoa_hid_driver - Error creating class for android");
-        goto setup_usb_error3;
+        goto setup_usb_error4;
     }
 
     if(setup_keyboard(first_accessory_mode_device_nr)){
         printk("aoa_hid_driver - Error setting up keyboard\n");
-        goto setup_usb_error4;
+        goto setup_usb_error5;
     }
 
     if(usb_register(&android_accessory_mode_driver)){
         printk("aoa_hid_driver - Error registering USB driver\n");
-        goto setup_usb_error5;
+        goto setup_usb_error6;
     }
 
     return 0;
 
-setup_usb_error5:
+setup_usb_error6:
     cleanup_keyboard();
 
-setup_usb_error4:
+setup_usb_error5:
     class_destroy(accessory_mode_device_class);
 
-setup_usb_error3:
+setup_usb_error4:
     unregister_chrdev_region(first_accessory_mode_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
 
-setup_usb_error2:
+setup_usb_error3:
     usb_deregister(&android_default_driver);
+
+setup_usb_error2:
+    cleanup_hid_descriptor();
 
 setup_usb_error1:
     if(manufacturer){
@@ -161,6 +170,7 @@ void cleanup_usb(void){
     class_destroy(accessory_mode_device_class);
     unregister_chrdev_region(first_accessory_mode_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
     usb_deregister(&android_default_driver);
+    cleanup_hid_descriptor();
     kfree(manufacturer);
     kfree(model);
     kfree(description);
@@ -264,6 +274,18 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
         goto android_accessory_mode_probe_error0;
     }
 
+    int num_bytes_send = usb_control_msg(usb_dev, usb_sndctrlpipe(usb_dev, 0), ACCESSORY_REGISTER_HID, USB_DIR_OUT | USB_TYPE_VENDOR, 1, get_hid_descriptor_size(), NULL, 0, 1000);
+    if(num_bytes_send != 0){
+        printk("aoa_hid_driver - Error registering HID descriptor with android device, usb_control_msg returned %d instead of 0\n", num_bytes_send);
+        goto android_accessory_mode_probe_error0;
+    }
+
+    num_bytes_send = usb_control_msg(usb_dev, usb_sndctrlpipe(usb_dev, 0), ACCESSORY_SET_HID_REPORT_DESC, USB_DIR_OUT | USB_TYPE_VENDOR, 1, 0, get_hid_descriptor(), get_hid_descriptor_size(), 1000);
+    if(num_bytes_send != get_hid_descriptor_size()){
+        printk("aoa_hid_driver - Error setting HID report descriptor with android device, usb_control_msg returned %d instead of %d\n", num_bytes_send, (int)get_hid_descriptor_size());
+        goto android_accessory_mode_probe_error0;
+    }
+
     accessory_mode_devices[candidate_index] = usb_dev;
 
     if(add_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index)){
@@ -295,4 +317,12 @@ static void android_accessory_mode_disconnect(struct usb_interface* interface){
             return;
         }
     }
+}
+
+struct usb_device* get_usb_device(int minor){
+    if(minor < 0 || minor >= NUM_POSSIBLE_ACCESSORY_MODE_DEVICES){
+        return NULL;
+    }
+
+    return accessory_mode_devices[minor];
 }
