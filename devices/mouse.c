@@ -75,6 +75,7 @@ setup_mouse_error0:
 
 void cleanup_mouse(void){
     cdev_del(&mouse_device);
+    class_destroy(mouse_device_class);
     unregister_chrdev_region(mouse_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         kfree(mouse_hid_events[i]);
@@ -94,7 +95,7 @@ add_mouse_device_error0:
 }
 
 void remove_mouse_device(int minor){
-    device_destroy(mouse_device_class, minor);
+    device_destroy(mouse_device_class, mouse_device_nr + minor);
 }
 
 static ssize_t mouse_write(struct file* File, const char* user_buffer, size_t count, loff_t* offs){
