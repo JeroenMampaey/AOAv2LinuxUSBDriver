@@ -1,7 +1,7 @@
 .PHONY: install uninstall
 
 obj-m += aoa_hid_driver.o
-aoa_hid_driver-objs := module.o sys_files.o usb.o hid_descriptor.o devices/keyboard.o devices/mouse.o
+aoa_hid_driver-objs := module.o sys_files.o usb.o hid_descriptor.o devices/keyboard.o devices/mouse.o devices/volume.o devices/brightness.o
 
 all: module
 

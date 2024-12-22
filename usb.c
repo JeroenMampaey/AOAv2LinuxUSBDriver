@@ -2,6 +2,8 @@
 #include "sys_files.h"
 #include "devices/keyboard.h"
 #include "devices/mouse.h"
+#include "devices/volume.h"
+#include "devices/brightness.h"
 #include "hid_descriptor.h"
 
 #include <linux/device.h>
@@ -112,12 +114,28 @@ int setup_usb(void){
         goto setup_usb_error6;
     }
 
-    if(usb_register(&android_accessory_mode_driver)){
-        printk("aoa_hid_driver - Error registering USB driver\n");
+    if(setup_volume()){
+        printk("aoa_hid_driver - Error setting up volume\n");
         goto setup_usb_error7;
     }
 
+    if(setup_brightness()){
+        printk("aoa_hid_driver - Error setting up brightness\n");
+        goto setup_usb_error8;
+    }
+
+    if(usb_register(&android_accessory_mode_driver)){
+        printk("aoa_hid_driver - Error registering USB driver\n");
+        goto setup_usb_error9;
+    }
+
     return 0;
+
+setup_usb_error9:
+    cleanup_brightness();
+
+setup_usb_error8:
+    cleanup_volume();
 
 setup_usb_error7:
     cleanup_mouse();
@@ -155,9 +173,13 @@ void cleanup_usb(void){
         if(accessory_mode_devices[i]){
             remove_keyboard_device(i);
             remove_mouse_device(i);
+            remove_volume_device(i);
+            remove_brightness_device(i);
             accessory_mode_devices[i] = NULL;
         }
     }
+    cleanup_brightness();
+    cleanup_volume();
     cleanup_mouse();
     cleanup_keyboard();
     usb_deregister(&android_default_driver);
@@ -289,7 +311,20 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
         goto android_accessory_mode_probe_error2;
     }
 
+    if(add_volume_device(candidate_index)){
+        printk("aoa_hid_driver - Error adding volume device\n");
+        goto android_accessory_mode_probe_error3;
+    }
+
+    if(add_brightness_device(candidate_index)){
+        printk("aoa_hid_driver - Error adding brightness device\n");
+        goto android_accessory_mode_probe_error4;
+    }
+
     return 0;
+
+android_accessory_mode_probe_error4:
+    remove_volume_device(candidate_index);
 
 android_accessory_mode_probe_error3:
     remove_mouse_device(candidate_index);
@@ -316,6 +351,8 @@ static void android_accessory_mode_disconnect(struct usb_interface* interface){
         if(accessory_mode_devices[i] == usb_dev){
             remove_keyboard_device(i);
             remove_mouse_device(i);
+            remove_volume_device(i);
+            remove_brightness_device(i);
             accessory_mode_devices[i] = NULL;
             return;
         }

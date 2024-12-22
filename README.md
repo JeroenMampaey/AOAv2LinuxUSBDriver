@@ -1,6 +1,6 @@
 # About
 
-A simple Linux USB driver for controlling Android devices using the [HID](https://en.wikipedia.org/wiki/Human_interface_device) support in the [Android Open Accessory (AOA) 2.0 protocol](https://source.android.com/docs/core/interaction/accessories/aoa2). Unlike [ADB](https://developer.android.com/tools/adb), this approach does not require USB debugging to be enabled on the device.
+A simple Linux USB driver for controlling Android devices using the [HID](https://en.wikipedia.org/wiki/Human_interface_device) support in the [Android Open Accessory (AOA) 2.0 protocol](https://source.android.com/docs/core/interaction/accessories/aoa2). Unlike [ADB](https://developer.android.com/tools/adb), this approach does not require USB debugging to be enabled on the device but does require an Android device supporting the AOAv2 protocol (the driver will check this).
 
 Basically this driver will put the Android device in [accessory mode](https://developer.android.com/develop/connectivity/usb) and then leverages AOAv2 to send HID events to the Android device. This driver only leverages only some simple HID functionality: keyboard, mouse, volume, brightness.
 
@@ -75,4 +75,22 @@ echo -n -e '\x00\x00\x01\x00' > /dev/android_mouse0
 For example, to click at the current position:
 ```
 echo -n -e '\x00\x00\x00\x01' > /dev/android_mouse0
+```
+
+# Volume
+
+For changing the volume, write 1 byte to the `/dev/android_volume_` file, 0xFF to decrement the volume, 0x01 to increment the volume.
+
+For example, to decrement the volume:
+```
+echo -n -e '\xFF' > /dev/android_volume0
+```
+
+# Brightness
+
+For changing the brightness, write 1 byte to the `/dev/android_brightness_` file, 0xFF to decrease the brightness, 0x01 to increase the brightness.
+
+For example, to increase the brightness:
+```
+echo -n -e '\x01' > /dev/android_brightness0
 ```

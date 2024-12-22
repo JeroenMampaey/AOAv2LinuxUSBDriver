@@ -1,6 +1,7 @@
 #include "hid_descriptor.h"
 #include <linux/slab.h>
 
+// https://usb.org/sites/default/files/hut1_21.pdf
 static char hid_descriptor[] = {
     0x05, 0x01,                     // Usage Page (Generic Desktop Ctrls)
     0x09, 0x06,                     // Usage (Keyboard)
@@ -52,6 +53,19 @@ static char hid_descriptor[] = {
     0x81, 0x06,                     //     INPUT (Data,Var,Rel)
     0xC0,                           //   END_COLLECTION
     0xC0,                           // END COLLECTION
+
+    0x05, 0x0c,                     // Usage Page (Consumer Devices)
+    0x09, 0x01,                     // Usage (Consumer Control)
+    0xa1, 0x01,                     // Collection (Application)
+    0x85, 0x03,                     //   Report ID (3)
+    0x19, 0x00,                     //   Usage Minimum (0),
+    0x2A, 0xCD, 0x02,               //   Usage Maximum (0x23C),
+    0x15, 0x00,                     //   Logical Minimum (0)
+    0x26, 0x3C, 0x02,               //   Logical Maximum (0x23C)
+    0x75, 0x10,                     //   Report Size (10)
+    0x95, 0x01,                     //   Report Count (1)
+    0x81, 0x00,                     //   Input (Data,Array,Absolute)
+    0xC0,                           // End Collection
 };
 
 static char* dynamically_allocated_hid_descriptor = NULL;
