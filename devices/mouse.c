@@ -107,6 +107,11 @@ static ssize_t mouse_write(struct file* File, const char* user_buffer, size_t co
     int minor = iminor(file_inode(File));
     int not_copied = copy_from_user(buffer[minor], user_buffer, count);
 
+    if(buffer[minor][3] != 0 && buffer[minor][3] != 1){
+        printk("aoa_hid_driver - Error writing to mouse device, the fourth byte of the write must be either 0 or 1\n");
+        return -EINVAL;
+    }
+
     mouse_hid_events[minor][0] = 0x02;
     mouse_hid_events[minor][1] = buffer[minor][3];
     mouse_hid_events[minor][2] = buffer[minor][0];
@@ -114,6 +119,15 @@ static ssize_t mouse_write(struct file* File, const char* user_buffer, size_t co
     mouse_hid_events[minor][4] = buffer[minor][2];
 
     usb_control_msg(get_usb_device(minor), usb_sndctrlpipe(get_usb_device(minor), 0), ACCESSORY_SEND_HID_EVENT, USB_DIR_OUT | USB_TYPE_VENDOR, 1, 0, mouse_hid_events[minor], 5, 1000);
+
+    if(buffer[minor][3] == 1){
+        mouse_hid_events[minor][0] = 0x02;
+        mouse_hid_events[minor][1] = 0x00;
+        mouse_hid_events[minor][2] = 0x00;
+        mouse_hid_events[minor][3] = 0x00;
+        mouse_hid_events[minor][4] = 0x00;
+        usb_control_msg(get_usb_device(minor), usb_sndctrlpipe(get_usb_device(minor), 0), ACCESSORY_SEND_HID_EVENT, USB_DIR_OUT | USB_TYPE_VENDOR, 1, 0, mouse_hid_events[minor], 5, 1000);
+    }
 
     int delta = count - not_copied;
     return delta;
