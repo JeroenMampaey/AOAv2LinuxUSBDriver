@@ -17,13 +17,15 @@ static struct file_operations fops = {
     .write = keyboard_write
 };
 
+static dev_t keyboard_device_nr;
 static struct cdev keyboard_device;
+static struct class* keyboard_device_class;
 
 static unsigned int file_is_open[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
 static char buffer[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES][MAX_ACCEPTED_WRITE_SIZE];
 static char* keyboard_hid_events[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
 
-int setup_keyboard(dev_t dev_nr){
+int setup_keyboard(void){
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         keyboard_hid_events[i] = NULL;
         file_is_open[i] = 0;
@@ -36,13 +38,29 @@ int setup_keyboard(dev_t dev_nr){
         }
     }
 
+    if(alloc_chrdev_region(&keyboard_device_nr, 0, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES, "android_keyboards") < 0){
+		printk("aoa_hid_driver - keyboard_device_nr could not be allocated\n");
+		goto setup_keyboard_error0;
+	}
+
+    if(!(keyboard_device_class = class_create("android_keyboard"))){
+        printk("aoa_hid_driver - Error creating class for android keyboard");
+        goto setup_keyboard_error1;
+    }
+
     cdev_init(&keyboard_device, &fops);
-    if(cdev_add(&keyboard_device, dev_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES)){
+    if(cdev_add(&keyboard_device, keyboard_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES)){
         printk("aoa_hid_driver - Error adding keyboard device\n");
-        goto setup_keyboard_error0;
+        goto setup_keyboard_error2;
     }
 
     return 0;
+
+setup_keyboard_error2:
+    class_destroy(keyboard_device_class);
+
+setup_keyboard_error1:
+    unregister_chrdev_region(keyboard_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
 
 setup_keyboard_error0:
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
@@ -56,14 +74,16 @@ setup_keyboard_error0:
 
 void cleanup_keyboard(void){
     cdev_del(&keyboard_device);
+    class_destroy(keyboard_device_class);
+    unregister_chrdev_region(keyboard_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         kfree(keyboard_hid_events[i]);
     }
 }
 
-int add_keyboard_device(struct class* dev_class, dev_t dev_nr){
-    if(device_create(dev_class, NULL, dev_nr, NULL, "android_keyboard%d", MINOR(dev_nr))==NULL){
-		printk("aoa_hid_driver - Can not create device file for minor %d\n", MINOR(dev_nr));
+int add_keyboard_device(int minor){
+    if(device_create(keyboard_device_class, NULL, keyboard_device_nr + minor, NULL, "android_keyboard%d", minor)==NULL){
+		printk("aoa_hid_driver - Can not create device file for minor %d\n", minor);
 		goto add_keyboard_device_error0;
 	}
 
@@ -73,8 +93,8 @@ add_keyboard_device_error0:
     return -1;
 }
 
-void remove_keyboard_device(struct class* dev_class, dev_t dev_nr){
-    device_destroy(dev_class, dev_nr);
+void remove_keyboard_device(int minor){
+    device_destroy(keyboard_device_class, keyboard_device_nr + minor);
 }
 
 static ssize_t keyboard_write(struct file* File, const char* user_buffer, size_t count, loff_t* offs){
@@ -82,8 +102,6 @@ static ssize_t keyboard_write(struct file* File, const char* user_buffer, size_t
         printk("aoa_hid_driver - Error writing to keyboard device, a single write to the keyboard can handle at most %d characters but attempted to write %d characters instead\n", MAX_ACCEPTED_WRITE_SIZE, (int)count);
         return -EINVAL;
     }
-
-    printk("Count is: %ld\n", count);
 
     int minor = iminor(file_inode(File));
     int not_copied = copy_from_user(buffer[minor], user_buffer, count);

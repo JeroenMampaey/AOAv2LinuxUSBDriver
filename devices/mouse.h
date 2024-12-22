@@ -4,10 +4,10 @@
 #include <linux/uaccess.h>
 #include <linux/cdev.h>
 
-int setup_mouse(dev_t dev_nr);
+int setup_mouse(void);
 void cleanup_mouse(void);
 
-int add_mouse_device(struct class* dev_class, dev_t dev_nr);
-void remove_mouse_device(struct class* dev_class, dev_t dev_nr);
+int add_mouse_device(int minor);
+void remove_mouse_device(int minor);
 
 #endif

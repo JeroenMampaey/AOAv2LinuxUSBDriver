@@ -58,8 +58,6 @@ static struct usb_driver android_accessory_mode_driver = {
 };
 
 static struct usb_device* accessory_mode_devices[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
-static dev_t first_accessory_mode_device_nr;
-static struct class* accessory_mode_device_class;
 
 int setup_usb(void){
     manufacturer = kmalloc(strlen(MANUFACTURER_STRING)+1, GFP_KERNEL);
@@ -104,22 +102,12 @@ int setup_usb(void){
         goto setup_usb_error2;
     }
 
-    if(alloc_chrdev_region(&first_accessory_mode_device_nr, 0, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES, "android_devices") < 0){
-		printk("aoa_hid_driver - first_accessory_mode_device_nr could not be allocated\n");
-		goto setup_usb_error3;
-	}
-    
-    if(!(accessory_mode_device_class = class_create("android"))){
-        printk("aoa_hid_driver - Error creating class for android");
-        goto setup_usb_error4;
-    }
-
-    if(setup_keyboard(first_accessory_mode_device_nr)){
+    if(setup_keyboard()){
         printk("aoa_hid_driver - Error setting up keyboard\n");
         goto setup_usb_error5;
     }
 
-    if(setup_mouse(first_accessory_mode_device_nr)){
+    if(setup_mouse()){
         printk("aoa_hid_driver - Error setting up mouse\n");
         goto setup_usb_error6;
     }
@@ -138,12 +126,6 @@ setup_usb_error6:
     cleanup_keyboard();
 
 setup_usb_error5:
-    class_destroy(accessory_mode_device_class);
-
-setup_usb_error4:
-    unregister_chrdev_region(first_accessory_mode_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
-
-setup_usb_error3:
     usb_deregister(&android_default_driver);
 
 setup_usb_error2:
@@ -171,15 +153,13 @@ void cleanup_usb(void){
     usb_deregister(&android_accessory_mode_driver);
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         if(accessory_mode_devices[i]){
-            remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
-            remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
+            remove_keyboard_device(i);
+            remove_mouse_device(i);
             accessory_mode_devices[i] = NULL;
         }
     }
     cleanup_mouse();
     cleanup_keyboard();
-    class_destroy(accessory_mode_device_class);
-    unregister_chrdev_region(first_accessory_mode_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
     usb_deregister(&android_default_driver);
     cleanup_hid_descriptor();
     kfree(manufacturer);
@@ -299,12 +279,12 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
 
     accessory_mode_devices[candidate_index] = usb_dev;
 
-    if(add_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index)){
+    if(add_keyboard_device(candidate_index)){
         printk("aoa_hid_driver - Error adding keyboard device\n");
         goto android_accessory_mode_probe_error1;
     }
 
-    if(add_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index)){
+    if(add_mouse_device(candidate_index)){
         printk("aoa_hid_driver - Error adding mouse device\n");
         goto android_accessory_mode_probe_error2;
     }
@@ -312,10 +292,10 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
     return 0;
 
 android_accessory_mode_probe_error3:
-    remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index);
+    remove_mouse_device(candidate_index);
 
 android_accessory_mode_probe_error2:
-    remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index);
+    remove_keyboard_device(candidate_index);
 
 android_accessory_mode_probe_error1:
     accessory_mode_devices[candidate_index] = NULL;
@@ -334,8 +314,8 @@ static void android_accessory_mode_disconnect(struct usb_interface* interface){
 
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         if(accessory_mode_devices[i] == usb_dev){
-            remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
-            remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
+            remove_keyboard_device(i);
+            remove_mouse_device(i);
             accessory_mode_devices[i] = NULL;
             return;
         }

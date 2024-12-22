@@ -18,15 +18,15 @@ static struct file_operations fops = {
     .write = mouse_write
 };
 
+static dev_t mouse_device_nr;
 static struct cdev mouse_device;
+static struct class* mouse_device_class;
 
 static unsigned int file_is_open[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
 static char buffer[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES][ACCEPTED_WRITE_SIZE];
 static char* mouse_hid_events[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
 
-int setup_mouse(dev_t dev_nr){
-    printk("Setting up the mouse...\n");
-
+int setup_mouse(void){
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         mouse_hid_events[i] = NULL;
         file_is_open[i] = 0;
@@ -39,13 +39,29 @@ int setup_mouse(dev_t dev_nr){
         }
     }
 
+    if(alloc_chrdev_region(&mouse_device_nr, 0, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES, "android_mouses") < 0){
+		printk("aoa_hid_driver - mouse_device_nr could not be allocated\n");
+		goto setup_mouse_error0;
+	}
+
+    if(!(mouse_device_class = class_create("android_mouse"))){
+        printk("aoa_hid_driver - Error creating class for android mouse");
+        goto setup_mouse_error1;
+    }
+
     cdev_init(&mouse_device, &fops);
-    if(cdev_add(&mouse_device, dev_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES)){
+    if(cdev_add(&mouse_device, mouse_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES)){
         printk("aoa_hid_driver - Error adding mouse device\n");
-        goto setup_mouse_error0;
+        goto setup_mouse_error2;
     }
 
     return 0;
+
+setup_mouse_error2:
+    class_destroy(mouse_device_class);
+
+setup_mouse_error1:
+    unregister_chrdev_region(mouse_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
 
 setup_mouse_error0:
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
@@ -59,15 +75,15 @@ setup_mouse_error0:
 
 void cleanup_mouse(void){
     cdev_del(&mouse_device);
+    unregister_chrdev_region(mouse_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         kfree(mouse_hid_events[i]);
     }
 }
 
-int add_mouse_device(struct class* dev_class, dev_t dev_nr){
-    printk("Adding mouse device...\n");
-    if(device_create(dev_class, NULL, dev_nr, NULL, "android_mouse%d", MINOR(dev_nr))==NULL){
-		printk("aoa_hid_driver - Can not create device file for minor %d\n", MINOR(dev_nr));
+int add_mouse_device(int minor){
+    if(device_create(mouse_device_class, NULL, mouse_device_nr + minor, NULL, "android_mouse%d", minor)==NULL){
+		printk("aoa_hid_driver - Can not create device file for minor %d\n", minor);
 		goto add_mouse_device_error0;
 	}
 
@@ -77,8 +93,8 @@ add_mouse_device_error0:
     return -1;
 }
 
-void remove_mouse_device(struct class* dev_class, dev_t dev_nr){
-    device_destroy(dev_class, dev_nr);
+void remove_mouse_device(int minor){
+    device_destroy(mouse_device_class, minor);
 }
 
 static ssize_t mouse_write(struct file* File, const char* user_buffer, size_t count, loff_t* offs){
