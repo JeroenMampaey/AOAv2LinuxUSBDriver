@@ -1,6 +1,10 @@
 #ifndef USB_H
 #define USB_H
 
+#include <linux/usb.h>
+
+#define NUM_POSSIBLE_ACCESSORY_MODE_DEVICES 64
+
 // https://source.android.com/docs/core/interaction/accessories/aoa
 // https://source.android.com/docs/core/interaction/accessories/aoa2
 #define ACCESSORY_GET_PROTOCOL 51
@@ -13,5 +17,7 @@
 
 int setup_usb(void);
 void cleanup_usb(void);
+
+struct usb_device* get_usb_device(int minor);
 
 #endif
