@@ -1,5 +1,5 @@
 #include "keyboard.h"
-#include "usb.h"
+#include "../usb.h"
 
 #define MAX_ACCEPTED_WRITE_SIZE 32
 
@@ -19,9 +19,9 @@ static struct file_operations fops = {
 
 static struct cdev keyboard_device;
 
-unsigned int file_is_open[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
-char buffer[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES][MAX_ACCEPTED_WRITE_SIZE];
-char* keyboard_hid_events[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
+static unsigned int file_is_open[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
+static char buffer[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES][MAX_ACCEPTED_WRITE_SIZE];
+static char* keyboard_hid_events[NUM_POSSIBLE_ACCESSORY_MODE_DEVICES];
 
 int setup_keyboard(dev_t dev_nr){
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
@@ -83,6 +83,8 @@ static ssize_t keyboard_write(struct file* File, const char* user_buffer, size_t
         return -EINVAL;
     }
 
+    printk("Count is: %ld\n", count);
+
     int minor = iminor(file_inode(File));
     int not_copied = copy_from_user(buffer[minor], user_buffer, count);
 
@@ -132,23 +134,21 @@ static ssize_t keyboard_write(struct file* File, const char* user_buffer, size_t
 static int driver_open(struct inode* device_file, struct file* instance){
     int minor = iminor(device_file);
 
-    if(atomic_read((atomic_t*)&file_is_open[minor])){
+    if(atomic_cmpxchg((atomic_t*)&file_is_open[minor], 0, 1)){
         printk("aoa_hid_driver - Error opening keyboard device, device is already open\n");
         return -EBUSY;
     }
 
-    atomic_set((atomic_t*)&file_is_open[minor], 1);
     return 0;
 }
 
 static int driver_close(struct inode* device_file, struct file* instance){
     int minor = iminor(device_file);
 
-    if(!atomic_read((atomic_t*)&file_is_open[minor])){
+    if(!atomic_cmpxchg((atomic_t*)&file_is_open[minor], 1, 0)){
         printk("aoa_hid_driver - Error closing keyboard device, device is already closed\n");
         return -EBUSY;
     }
-
-    atomic_set((atomic_t*)&file_is_open[minor], 0);
+    
     return 0;
 }

@@ -1,6 +1,7 @@
 #include "usb.h"
 #include "sys_files.h"
-#include "keyboard.h"
+#include "devices/keyboard.h"
+#include "devices/mouse.h"
 #include "hid_descriptor.h"
 
 #include <linux/device.h>
@@ -118,12 +119,20 @@ int setup_usb(void){
         goto setup_usb_error5;
     }
 
-    if(usb_register(&android_accessory_mode_driver)){
-        printk("aoa_hid_driver - Error registering USB driver\n");
+    if(setup_mouse(first_accessory_mode_device_nr)){
+        printk("aoa_hid_driver - Error setting up mouse\n");
         goto setup_usb_error6;
     }
 
+    if(usb_register(&android_accessory_mode_driver)){
+        printk("aoa_hid_driver - Error registering USB driver\n");
+        goto setup_usb_error7;
+    }
+
     return 0;
+
+setup_usb_error7:
+    cleanup_mouse();
 
 setup_usb_error6:
     cleanup_keyboard();
@@ -163,9 +172,11 @@ void cleanup_usb(void){
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         if(accessory_mode_devices[i]){
             remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
+            remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
             accessory_mode_devices[i] = NULL;
         }
     }
+    cleanup_mouse();
     cleanup_keyboard();
     class_destroy(accessory_mode_device_class);
     unregister_chrdev_region(first_accessory_mode_device_nr, NUM_POSSIBLE_ACCESSORY_MODE_DEVICES);
@@ -293,7 +304,18 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
         goto android_accessory_mode_probe_error1;
     }
 
+    if(add_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index)){
+        printk("aoa_hid_driver - Error adding mouse device\n");
+        goto android_accessory_mode_probe_error2;
+    }
+
     return 0;
+
+android_accessory_mode_probe_error3:
+    remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index);
+
+android_accessory_mode_probe_error2:
+    remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + candidate_index);
 
 android_accessory_mode_probe_error1:
     accessory_mode_devices[candidate_index] = NULL;
@@ -313,6 +335,7 @@ static void android_accessory_mode_disconnect(struct usb_interface* interface){
     for(int i=0; i<NUM_POSSIBLE_ACCESSORY_MODE_DEVICES; i++){
         if(accessory_mode_devices[i] == usb_dev){
             remove_keyboard_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
+            remove_mouse_device(accessory_mode_device_class, first_accessory_mode_device_nr + i);
             accessory_mode_devices[i] = NULL;
             return;
         }

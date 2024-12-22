@@ -2,8 +2,8 @@
 #include <linux/fs.h>
 #include <linux/sysfs.h>
 #include <linux/device.h>
-#include <linux/atomic.h>
 #include <linux/kobject.h>
+#include <linux/spinlock.h>
 
 #define MAX_ANDROID_DEVICE_IDS 25
 
@@ -17,6 +17,7 @@ static ssize_t show_known_devices_show(struct kobject* kobj, struct kobj_attribu
 static u32 known_device_ids[MAX_ANDROID_DEVICE_IDS];
 static int num_known_device_ids = 0;
 static struct kobject *android_usb_kobj;
+spinlock_t known_device_ids_lock;
 
 static struct kobj_attribute add_known_device_attr = __ATTR(add_known_device, 0660, NULL, add_known_device_store);
 static struct kobj_attribute remove_known_device_attr = __ATTR(remove_known_device, 0660, NULL, remove_known_device_store);
@@ -43,6 +44,8 @@ int setup_sysfs(void){
 		goto setup_sysfs_error3;
 	}
 
+	spin_lock_init(&known_device_ids_lock);
+
 	return 0;
 
 setup_sysfs_error3:
@@ -68,19 +71,25 @@ void cleanup_sysfs(void){
 static ssize_t add_known_device_store(struct kobject* kobj, struct kobj_attribute *attr, const char* buffer, size_t count){
 	unsigned short id_vendor, id_product;
 	
-	int ret = sscanf(buffer, "%hx %hx", &id_vendor, &id_product);
+	int ret = sscanf(buffer, "%hx %hx", &id_vendor, &id_product); // Store buffer should be null terminated thus this is safe, https://www.kernel.org/doc/Documentation/filesystems/sysfs.txt
 	if(ret != 2){
 		printk("aoa_hid_driver - Invalid input \"%s\" for add_known_device\n", buffer);
 		return -EINVAL;
 	}
 
+	unsigned long flags;
+	spin_lock_irqsave(&known_device_ids_lock, flags);
+
 	if(num_known_device_ids >= MAX_ANDROID_DEVICE_IDS){
 		printk("aoa_hid_driver - No more space for additional known devices\n");
+		spin_unlock_irqrestore(&known_device_ids_lock, flags);
 		return -ENOMEM;
 	}
 
 	known_device_ids[num_known_device_ids] = (((u32)id_vendor) << 16) | ((u32)id_product);
-	atomic_inc((atomic_t*)&num_known_device_ids);
+	num_known_device_ids++;
+
+	spin_unlock_irqrestore(&known_device_ids_lock, flags);
 
 	return count;
 }
@@ -107,9 +116,14 @@ static ssize_t remove_known_device_store(struct kobject* kobj, struct kobj_attri
 		return -EINVAL;
 	}
 
-	atomic_set((atomic_t*)&known_device_ids[i], known_device_ids[num_known_device_ids - 1]);
-	atomic_set((atomic_t*)&known_device_ids[num_known_device_ids - 1], 0);
-	atomic_dec((atomic_t*)&num_known_device_ids);
+	unsigned long flags;
+	spin_lock_irqsave(&known_device_ids_lock, flags);
+
+	known_device_ids[i] = known_device_ids[num_known_device_ids - 1];
+	known_device_ids[num_known_device_ids - 1] = 0;
+	num_known_device_ids--;
+
+	spin_unlock_irqrestore(&known_device_ids_lock, flags);
 
 	return count;
 }
