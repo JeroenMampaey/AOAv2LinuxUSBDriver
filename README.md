@@ -2,9 +2,9 @@
 
 A simple Linux USB driver for controlling Android devices using the [HID](https://en.wikipedia.org/wiki/Human_interface_device) support in the [Android Open Accessory (AOA) 2.0 protocol](https://source.android.com/docs/core/interaction/accessories/aoa2). Unlike [ADB](https://developer.android.com/tools/adb), this approach does not require USB debugging to be enabled on the device but does require an Android device supporting the AOAv2 protocol (the driver will check this).
 
-Basically this driver will put the Android device in [accessory mode](https://developer.android.com/develop/connectivity/usb) and then leverages AOAv2 to send HID events to the Android device. This driver only leverages only some simple HID functionality: keyboard, mouse, volume, brightness.
+Basically this driver will put the Android device in [accessory mode](https://developer.android.com/develop/connectivity/usb) and then leverages AOAv2 to send HID events to the Android device. This driver only leverages only some simple HID functionality: keyboard, mouse, volume, brightness, touchscreen.
 
-*Warning: driver written by someone with zero experience writing drivers*
+*Warning: driver written by someone with zero experience writing drivers, has been tested BUT if there is still a bug somewhere, this could take down your operating system.*
 
 # How to use
 
@@ -26,13 +26,14 @@ This will create a file `/sys/kernel/android_usb/add_known_device`. In this file
 echo 04e8 6860 > /sys/kernel/android_usb/add_known_device
 ```
 
-Then connect (reconnect) the Android device. This will eventually create 4 device files, which can be utilized to control the Android phone.
+Then connect (reconnect) the Android device. This will eventually create 5 device files, which can be utilized to control the Android phone.
 
 ```
 /dev/android_keyboard0
 /dev/android_mouse0
 /dev/android_volume0
 /dev/android_brightness0
+/dev/android_touch0
 ```
 
 To remove the USB driver, run:
@@ -95,4 +96,13 @@ For changing the brightness, write 1 byte to the `/dev/android_brightness_` file
 For example, to increase the brightness:
 ```
 echo -n -e '\x01' > /dev/android_brightness0
+```
+
+# Touchscreen
+
+For clicking somewhere on the screen, write 2 bytes to the `/dev/android_touch_` file, the first specifies the x-coordinate between 0x00-0xFF and the second the y-coordinate between 0x00-0xFF. Bytes `0x00 0x00` represent the left upper corner of the screen, however the exact meaning of non-zero values seems to depend somewhat on the device. This action differs from the mouse because the coordinates where to click are absolute, you can tell where to click instead of having to move the mouse there.
+
+For example, to press somewhere near the left upper corner of the screen:
+```
+echo -n -e '\x10\x10' > /dev/android_touch0
 ```

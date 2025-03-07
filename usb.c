@@ -4,6 +4,7 @@
 #include "devices/mouse.h"
 #include "devices/volume.h"
 #include "devices/brightness.h"
+#include "devices/touch.h"
 #include "hid_descriptor.h"
 
 #include <linux/device.h>
@@ -124,12 +125,20 @@ int setup_usb(void){
         goto setup_usb_error8;
     }
 
-    if(usb_register(&android_accessory_mode_driver)){
-        printk("aoa_hid_driver - Error registering USB driver\n");
+    if(setup_touch()){
+        printk("aoa_hid_driver - Error setting up touch\n");
         goto setup_usb_error9;
     }
 
+    if(usb_register(&android_accessory_mode_driver)){
+        printk("aoa_hid_driver - Error registering USB driver\n");
+        goto setup_usb_error10;
+    }
+
     return 0;
+
+setup_usb_error10:
+    cleanup_touch();
 
 setup_usb_error9:
     cleanup_brightness();
@@ -175,9 +184,11 @@ void cleanup_usb(void){
             remove_mouse_device(i);
             remove_volume_device(i);
             remove_brightness_device(i);
+            remove_touch_device(i);
             accessory_mode_devices[i] = NULL;
         }
     }
+    cleanup_touch();
     cleanup_brightness();
     cleanup_volume();
     cleanup_mouse();
@@ -321,7 +332,15 @@ static int android_accessory_mode_probe(struct usb_interface* interface, const s
         goto android_accessory_mode_probe_error4;
     }
 
+    if(add_touch_device(candidate_index)){
+        printk("aoa_hid_driver - Error adding touch device\n");
+        goto android_accessory_mode_probe_error5;
+    }
+
     return 0;
+
+android_accessory_mode_probe_error5:
+    remove_brightness_device(candidate_index);
 
 android_accessory_mode_probe_error4:
     remove_volume_device(candidate_index);
@@ -353,6 +372,7 @@ static void android_accessory_mode_disconnect(struct usb_interface* interface){
             remove_mouse_device(i);
             remove_volume_device(i);
             remove_brightness_device(i);
+            remove_touch_device(i);
             accessory_mode_devices[i] = NULL;
             return;
         }
